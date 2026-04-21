@@ -1,0 +1,2669 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "inceptezsynapse-ws"
+		},
+		"AzureDataLakeStorage1_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'AzureDataLakeStorage1'"
+		},
+		"AzureDataLakeStorage2_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'AzureDataLakeStorage2'"
+		},
+		"AzureDataLakeStorage3_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'AzureDataLakeStorage3'"
+		},
+		"inceptezsynapse-ws-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'inceptezsynapse-ws-WorkspaceDefaultSqlServer'",
+			"defaultValue": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:inceptezsynapse-ws.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"ls_loandata_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'ls_loandata'"
+		},
+		"AzureDataLakeStorage1_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://inceptezadlsbankdata.dfs.core.windows.net/"
+		},
+		"AzureDataLakeStorage2_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://inceptezadls.dfs.core.windows.net/"
+		},
+		"AzureDataLakeStorage3_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://inceptezinputdata.dfs.core.windows.net/"
+		},
+		"inceptezsynapse-ws-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://batch25synapseadls.dfs.core.windows.net"
+		},
+		"ls_loandata_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://inceptezloandata.dfs.core.windows.net/"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/pl_hr_analytics')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "1_task_load_bronze",
+						"type": "SynapseNotebook",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"notebook": {
+								"referenceName": "1_data_ingestion",
+								"type": "NotebookReference"
+							},
+							"snapshot": true,
+							"sparkPool": {
+								"referenceName": "inceptezspark",
+								"type": "BigDataPoolReference"
+							},
+							"executorSize": "Small",
+							"conf": {
+								"spark.dynamicAllocation.enabled": false
+							},
+							"driverSize": "Small",
+							"authentication": {
+								"type": "MSI"
+							}
+						}
+					},
+					{
+						"name": "2_task_load_silver",
+						"type": "SynapseNotebook",
+						"dependsOn": [
+							{
+								"activity": "1_task_load_bronze",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"notebook": {
+								"referenceName": "2_data_process",
+								"type": "NotebookReference"
+							},
+							"snapshot": true,
+							"sparkPool": {
+								"referenceName": "inceptezspark",
+								"type": "BigDataPoolReference"
+							},
+							"executorSize": "Small",
+							"conf": {
+								"spark.dynamicAllocation.enabled": false
+							},
+							"driverSize": "Small",
+							"authentication": {
+								"type": "MSI"
+							}
+						}
+					},
+					{
+						"name": "3_task_dim_emp_load",
+						"type": "SynapseNotebook",
+						"dependsOn": [
+							{
+								"activity": "2_task_load_silver",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"notebook": {
+								"referenceName": "3_dim_emp_scd2",
+								"type": "NotebookReference"
+							},
+							"snapshot": true,
+							"sparkPool": {
+								"referenceName": "inceptezspark",
+								"type": "BigDataPoolReference"
+							},
+							"executorSize": "Small",
+							"conf": {
+								"spark.dynamicAllocation.enabled": false
+							},
+							"driverSize": "Small",
+							"authentication": {
+								"type": "MSI"
+							}
+						}
+					},
+					{
+						"name": "4_task_load_gold",
+						"type": "SynapseNotebook",
+						"dependsOn": [
+							{
+								"activity": "3_task_dim_emp_load",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"notebook": {
+								"referenceName": "4_build_fact_table",
+								"type": "NotebookReference"
+							},
+							"snapshot": true,
+							"sparkPool": {
+								"referenceName": "inceptezspark",
+								"type": "BigDataPoolReference"
+							},
+							"executorSize": "Small",
+							"conf": {
+								"spark.dynamicAllocation.enabled": false
+							},
+							"driverSize": "Small",
+							"authentication": {
+								"type": "MSI"
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-04-21T03:12:16Z"
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/notebooks/1_data_ingestion')]",
+				"[concat(variables('workspaceId'), '/bigDataPools/inceptezspark')]",
+				"[concat(variables('workspaceId'), '/notebooks/2_data_process')]",
+				"[concat(variables('workspaceId'), '/notebooks/3_dim_emp_scd2')]",
+				"[concat(variables('workspaceId'), '/notebooks/4_build_fact_table')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ds_bankdata')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureDataLakeStorage1",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "bank_txns.csv",
+						"fileSystem": "bankdata"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/AzureDataLakeStorage1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AzureDataLakeStorage1')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('AzureDataLakeStorage1_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('AzureDataLakeStorage1_accountKey')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AzureDataLakeStorage2')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('AzureDataLakeStorage2_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('AzureDataLakeStorage2_accountKey')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AzureDataLakeStorage3')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('AzureDataLakeStorage3_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('AzureDataLakeStorage3_accountKey')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/inceptezsynapse-ws-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('inceptezsynapse-ws-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/inceptezsynapse-ws-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('inceptezsynapse-ws-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ls_loandata')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('ls_loandata_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('ls_loandata_accountKey')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/trg_hr_analyics')]",
+			"type": "Microsoft.Synapse/workspaces/triggers",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"runtimeState": "Stopped",
+				"pipelines": [
+					{
+						"pipelineReference": {
+							"referenceName": "pl_hr_analytics",
+							"type": "PipelineReference"
+						},
+						"parameters": {}
+					}
+				],
+				"type": "ScheduleTrigger",
+				"typeProperties": {
+					"recurrence": {
+						"frequency": "Day",
+						"interval": 1,
+						"startTime": "2026-04-21T03:09:00",
+						"endTime": "2026-12-31T03:09:00",
+						"timeZone": "India Standard Time",
+						"schedule": {
+							"minutes": [
+								0
+							],
+							"hours": [
+								5
+							]
+						}
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/pipelines/pl_hr_analytics')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/10_store_procedure')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "select * from bank_schema.bank_txns;\nselect * from bank_schema.stg_bank_txns;\n\nTRUNCATE TABLE bank_schema.stg_bank_txns;\n\nCREATE TABLE bank_schema.stg_bank_txns\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN\n)\nAS\nselect * from bank_schema.bank_txns where 1=2;\n\n--DROP PROCEDURE bank_schema.usp_ProcessBankData_WithLogic;\nALTER PROCEDURE bank_schema.usp_ProcessBankData_WithLogic\n    @ProcessType NVARCHAR(20) -- Input parameter to choose logic\nAS\nBEGIN\n    DECLARE @RowCount INT;\n\n    -- 1. Check how many rows are in the staging table\n    SELECT @RowCount = COUNT(*) FROM bank_schema.stg_bank_txns;\n\n    -- 2. IF Condition: Check if staging is empty\n    IF @RowCount = 0\n    BEGIN\n        PRINT 'No new data found in staging. Operation cancelled.';\n    END\n    ELSE\n    BEGIN\n        PRINT 'Found ' + CAST(@RowCount AS NVARCHAR(10)) + ' rows. Starting processing...';\n\n        -- 3. Nested IF: Branching logic based on Input Parameter\n        IF @ProcessType = 'INSERT'\n        BEGIN\n            -- Insert data from stg to main table\n            INSERT INTO bank_schema.bank_txns select * from bank_schema.stg_bank_txns;\n            TRUNCATE TABLE bank_schema.stg_bank_txns;\n            PRINT 'Record Inserted Successfully. Record Count:' + CAST(@RowCount AS VARCHAR);\n        END\n        ELSE IF @ProcessType = 'RELOAD'\n        BEGIN\n            -- Wipe and reload logic\n            DELETE FROM bank_schema.bank_txns;\n            INSERT INTO bank_schema.bank_txns SELECT * FROM bank_schema.stg_bank_txns;\n            PRINT 'Full reload completed.';\n        END\n        ELSE\n        BEGIN\n            PRINT 'Invalid ProcessType provided.';\n        END\n    END\nEND;\n\n\n-- Execute/Call the stored procedure\nEXEC bank_schema.usp_ProcessBankData_WithLogic @ProcessType = 'INSERT';\n\nINSERT INTO bank_schema.stg_bank_txns (txnid, txndate, custid, amt, branch, region)\nVALUES \n(1007, '2026-04-10', 'CUST008', 6500.00, 'T. Nagar', 'Chennai');\n\n\nEXEC bank_schema.usp_ProcessBankData_WithLogic @ProcessType = 'RELOAD';\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptez_ddw",
+						"poolName": "inceptez_ddw"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/11_access_lake_database')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "\nselect * from inceptez_salesdb.dbo.orders_delta;\n\nselect * from inceptezdb.dbo.ext_bankdata;",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptez_salesdb",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/1_Create_database')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "\ncreate database testdb;\n\nselect * from sys.databases;\n\nuse inceptezdb;\n\n--to list the database names\nselect name from sys.databases;\n\nuse master;\ndrop database testdb;\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "master",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/2_Data_Exploration')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "--https\nselect * from OPENROWSET(\n    BULK 'https://batch25synapseadls.dfs.core.windows.net/raw/Unemployment.csv',\n    FORMAT = 'CSV',\n    PARSER_VERSION = '2.0'\n) as data1;\n\n--abfss\nselect * from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/Unemployment.csv',\n    FORMAT = 'CSV',\n    PARSER_VERSION = '2.0'\n) as data1;\n\n\n--header row as column names(HEADER_ROW)\n\nselect * from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/Unemployment.csv',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,\n    PARSER_VERSION = '2.0'\n) as data1;\n\n--specific columns\nselect [line number], state,gender,employed,unemployed from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/Unemployment.csv',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,\n    PARSER_VERSION = '2.0'\n) as data1;\n\n\n--using alias\nselect d1.[line number], d1.state,d1.gender,d1.employed,unemployed from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/Unemployment.csv',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,\n    PARSER_VERSION = '2.0'\n) as d1;\n\n--filter data\nselect d1.[line number], d1.state,d1.gender,d1.employed,unemployed from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/Unemployment.csv',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,\n    PARSER_VERSION = '2.0'\n) as d1 where state in ('CA','TX','NY');\n\n--group by\nselect d1.state,count(*) as cnt from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/Unemployment.csv',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,\n    PARSER_VERSION = '2.0'\n) as d1 where state in ('CA','TX','NY') group by state\n\n--with clause\n\nselect  * from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/Unemployment.csv',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,    \n    PARSER_VERSION = '2.0'\n)\nWITH(\n    [Line Number] INT,\n    [Month] varchar(20)\n) as d1;\n\n\n\nselect  * from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/Unemployment.csv',\n    FORMAT = 'CSV',\n    FIRSTROW = 2,    \n    PARSER_VERSION = '2.0'\n)\nWITH(\n    [Line Number] INT,\n    [Month] varchar(20)\n) as d1;\n\n--without header, setting the column names using WITH clause\nselect * from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/txns',\n    FORMAT = 'CSV',\n    PARSER_VERSION = '2.0'\n) \nWITH\n(\n    txnid int,\n    txndate varchar(20),\n    custid varchar(10),\n    amount float,\n    category varchar(100),\n    product varchar(100),\n    city varchar(100),\n    state varchar(100),\n    ptype varchar(10)\n)\nas txns;\n\n\n-- define cardinal or column position \nselect * from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/txns',\n    FORMAT = 'CSV',\n    PARSER_VERSION = '2.0'\n) \nWITH\n(\n    txnid int 1,\n    state varchar(100) 8\n)\nas txns;\n\n\n-- field terminator \nselect * from OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/txns',\n    FORMAT = 'CSV',\n    FIELDTERMINATOR = ',',\n    PARSER_VERSION = '2.0'\n) \nWITH\n(\n    txnid int 1,\n    state varchar(100) 8\n)\nas txns;\n\nuse inceptezdb;\n\nSELECT * FROM OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/txns',\n    FORMAT = 'CSV',\n    FIELDTERMINATOR = ',',\n    PARSER_VERSION = '2.0'\n) \nWITH\n(\n    -- Format: [Column Name] [Data Type] [Column Index/Ordinal] [Collation]\n    txnid int 1,\n    state varchar(100) COLLATE Latin1_General_100_CI_AS_KS_SC_UTF8 8\n)\nas txns;\n\n--set collate at database level\nalter database inceptezdb collate Latin1_General_100_CI_AS_KS_SC_UTF8\n\n\n-- select data without collate\nuse inceptezdb;\nSELECT * FROM OPENROWSET(\n    BULK 'abfss://raw@batch25synapseadls.dfs.core.windows.net/txns',\n    FORMAT = 'CSV',\n    FIELDTERMINATOR = ',',\n    PARSER_VERSION = '2.0'\n) \nWITH\n(\n    -- Format: [Column Name] [Data Type] [Column Index/Ordinal] [Collation]\n    txnid int 1,\n    state varchar(100) 8\n)\nas txns;\n\n\n\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptezdb",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/3_Data_Operations')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "--JSON data\nSELECT *\nFROM OPENROWSET(\n    BULK 'https://batch25synapseadls.dfs.core.windows.net/raw/orders.json',\n    FORMAT = 'CSV',  -- trick to read raw JSON\n    FIELDTERMINATOR = '0x0b',\n    FIELDQUOTE = '0x0b',\n    ROWTERMINATOR = '0x0b'\n) \nWITH (\n    jsondata NVARCHAR(MAX)\n)\nAS rows;\n\n\n\n\n--parse json data\n\nSELECT JSON_VALUE(jsondata,'$.order_id') as order_id\nFROM OPENROWSET(\n    BULK 'https://batch25synapseadls.dfs.core.windows.net/raw/orders.json',\n    FORMAT = 'CSV',  -- trick to read raw JSON\n    FIELDTERMINATOR = '0x0b',\n    FIELDQUOTE = '0x0b',\n    ROWTERMINATOR = '0x0b'\n) \nWITH (\n    jsondata NVARCHAR(MAX)\n)\nAS rows;\n\n\n\n---\n\nSELECT order_id,customer, amount,city\nFROM OPENROWSET(\n    BULK 'https://batch25synapseadls.dfs.core.windows.net/raw/orders.json',\n    FORMAT = 'CSV',  \n    FIELDTERMINATOR = '0x0b',\n    FIELDQUOTE = '0x0b',\n    ROWTERMINATOR = '0x0b'  -- This is the missing piece\n) \nWITH (\n    jsondata NVARCHAR(MAX) \n) as src\nCROSS APPLY OPENJSON(jsondata)\nWITH \n(\n    order_id INT '$.order_id',\n    customer VARCHAR(100) '$.customer',\n    amount FLOAT '$.amount',\n    city VARCHAR(100) '$.city'\n)\nAS rows;\n\n---create data source\nuse inceptezdb;\n\nDROP  EXTERNAL DATA SOURCE raw_container;\n\nCREATE EXTERNAL DATA SOURCE raw_container\nWITH\n(\n    LOCATION = 'https://batch25synapseadls.dfs.core.windows.net/raw/'\n);\n\n\nselect * from OPENROWSET(\n    BULK 'Unemployment.csv',\n    DATA_SOURCE = 'raw_container',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,\n    PARSER_VERSION = '2.0'\n) as data1;\n\n\n--create external file format\n\nCREATE EXTERNAL FILE FORMAT synapse_csv_format\nWITH\n(\n    FORMAT_TYPE = DELIMITEDTEXT\n    FORMAT_OPTIONS (\n        FIELD_TERMINATOR = ',',\n        FIRST_ROW = 2\n    )\n);\n\n--create external table\n\nCREATE EXTERNAL TABLE ext_unemployement\n(\n    line_number int,\n    month varchar(10)\n)\nWITH\n(\n    LOCATION = 'Unemployment.csv',\n    DATA_SOURCE = raw_container,\n    FILE_FORMAT = synapse_csv_format\n);\n\nselect * from ext_unemployement\n\nCREATE EXTERNAL TABLE ext_txns\n(\n    txnid int,\n    txndate varchar(20),\n    custid varchar(10),\n    amount float,\n    category varchar(100),\n    product varchar(100),\n    city varchar(100),\n    state varchar(100),\n    ptype varchar(10)\n)\nWITH\n(\n    LOCATION = 'txns',\n    DATA_SOURCE = raw_container,\n    FILE_FORMAT = synapse_csv_format\n);\n\nselect * from ext_txns;\n\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptezdb",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/4_Read_External_Source')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "\nselect  * from OPENROWSET(\n    BULK 'https://batch25synapseadls.dfs.core.windows.net/raw/custdata.csv',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,    \n    PARSER_VERSION = '2.0'\n) as d1;\n\nselect  * from OPENROWSET(\n    BULK 'https://inceptezadlsbankdata.dfs.core.windows.net/bankdata/bank_txns.csv',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,    \n    PARSER_VERSION = '2.0'\n) as d1;\n\nselect  * from OPENROWSET(\n    BULK 'bank_txns.csv',\n    DATA_SOURCE = 'bankdata_source',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,    \n    PARSER_VERSION = '2.0'\n) as d1;\n\nCREATE MASTER KEY ENCRYPTION BY PASSWORD = 'AzureInceptez#1234'\n\nDROP  DATABASE SCOPED CREDENTIAL creds;\n\nCREATE DATABASE SCOPED CREDENTIAL creds\nWITH IDENTITY = 'SHARED ACCESS SIGNATURE',\nSECRET = 'sv=2025-11-05&ss=bfqt&srt=sco&sp=rwdlacupyx&se=2026-04-30T09:52:56Z&st=2026-04-08T01:37:56Z&spr=https&sig=6obrqPIL87OdCP5Q3RQtWiB4qzWJ4gkurmUuaCVQQgs%3D'\n\n-- 1. Drop the existing data source so you can recreate it\nDROP EXTERNAL DATA SOURCE bankdata_source;\nGO\n\n-- 2. Recreate with the 'dfs' endpoint AND the container name included\nCREATE EXTERNAL DATA SOURCE bankdata_source\nWITH\n(\n    LOCATION = 'https://inceptezadlsbankdata.dfs.core.windows.net/bankdata/', \n    CREDENTIAL = creds\n);\n\nGO\n\n-- 3. Query just the file name (or folder/file if it's inside a subfolder)\nSELECT * FROM OPENROWSET(\n    BULK 'bank_txns.csv', -- Removed 'bankdata/' since it's now in the data source\n    DATA_SOURCE = 'bankdata_source',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,    \n    PARSER_VERSION = '2.0'\n) \nWITH\n(\n    txn_id VARCHAR(100)\n) as d1;\n\n\n---- DB Scoped Credentials using Managed Identity\n\n\n--Step1: Create credentials\n\nCREATE DATABASE SCOPED CREDENTIAL creds_mi\nWITH IDENTITY = 'Managed Identity';\n\n--step2: Goto storage account, provide \"Storage Blob data contributor\" role for the synapse ws managed identity\n\n--Step3: Create external data source\n\nCREATE EXTERNAL DATA SOURCE bankdata_source_mi\nWITH\n(\n    LOCATION = 'https://inceptezadlsbankdata.dfs.core.windows.net/bankdata/', \n    CREDENTIAL = creds_mi\n);\n\n--Step4: Query the file\nSELECT * FROM OPENROWSET(\n    BULK 'bank_txns.csv', \n    DATA_SOURCE = 'bankdata_source_mi',\n    FORMAT = 'CSV',\n    HEADER_ROW = TRUE,    \n    PARSER_VERSION = '2.0'\n) \nWITH\n(\n    txn_id VARCHAR(100)\n) as d1;\n\n---------------Create External Table----------------------------\n\n--Step1: Create external data source = bankdata_source_mi\n--Step2: Create external file format = synapse_csv_format\n--Step3: Create external table\n\nCREATE EXTERNAL TABLE ext_bankdata\n(\n    txn_id VARCHAR(10),\n\ttxn_date VARCHAR(10),\n\tcust_id VARCHAR(10),\n\tamount FLOAT,\n\tbranch VARCHAR(50),\n\tregion VARCHAR(100),\n\tpayment_type VARCHAR(10)\n)\nWITH\n(\n    LOCATION = 'bank_txns.csv',\n    DATA_SOURCE = bankdata_source_mi,\n    FILE_FORMAT = synapse_csv_format\n);\n\nselect * from ext_bankdata;\n\n\n-- To get the list of external file format\nSELECT * FROM sys.external_file_formats;\n\n-- To get the list of external data source\nSELECT * FROM sys.external_data_sources;\n\n--To get the list of external tables\nSELECT * FROM sys.external_tables;\n\n--To get the list of columns in external table\nSELECT * FROM INFORMATION_SCHEMA.COLUMNS where TABLE_NAME='ext_txns';\n\n--To get the size of data processed\nSELECT * FROM sys.dm_external_data_processed;\n\n--CTAS\nCreate Table extdata AS\nselect * from ext_bankdata\n\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptezdb",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/5_CETAS')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "--1. Create the file format\nCREATE EXTERNAL FILE FORMAT parquet_format\nWITH\n(\n    FORMAT_TYPE = PARQUET\n);\n\n--2. Create the data source - bankdata_source_mi\n\n--3. Create CETAS table\nCREATE EXTERNAL TABLE ext_bankdata_cetas\nWITH\n(\n    LOCATION = 'optimized/bank_txns',\n    DATA_SOURCE = bankdata_source_mi,\n    FILE_FORMAT = parquet_format\n)\nAS\nSELECT * FROM ext_bankdata;\n\nselect * from ext_bankdata_cetas;\n\n--Views\ncreate or alter VIEW vw_ext_bankdata\nAS\nselect cust_id,amount,branch from ext_bankdata_cetas where region = 'EAST';\n\nselect * from vw_ext_bankdata;\n\nselect * from INFORMATION_SCHEMA.TABLES where TABLE_TYPE = 'VIEW';\n\n--Schema\ncreate schema bankschema;\n\ncreate or alter VIEW bankschema.vw_ext_bankdata1\nAS\nselect cust_id,amount,branch from ext_bankdata_cetas where region = 'EAST';\n\n\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptezdb",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/6_dedicated_SQL')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "--Create Dedicated SQL Pool\n\nCREATE DATABASE inceptez_retaildb\n(\n    EDITION = 'DataWarehouse',\n    SERVICE_OBJECTIVE = 'DW100c'\n);\n\nCREATE SCHEMA bank_schema;\n\nCreate table bank_schema.bank_txns\n(\n    txnid int,\n    txndate date,\n    custid varchar(20),\n    amt float,\n    branch varchar(50),\n    region varchar(50)\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,  -- distributes data evenly across all nodes\n    CLUSTERED COLUMNSTORE INDEX  --large amount of data, compress and best of performance\n);\n\n--supports all CRUD(create,read,update,delete) operations\n\nselect * from bank_schema.bank_txns;\n\n\nINSERT INTO bank_schema.bank_txns (txnid, txndate, custid, amt, branch, region)\nVALUES \n(1001, '2026-04-01', 'CUST001', 1500.50, 'T. Nagar', 'Chennai');\nINSERT INTO bank_schema.bank_txns (txnid, txndate, custid, amt, branch, region)\nVALUES \n(1002, '2026-04-02', 'CUST002', 2750.00, 'Adyar', 'Chennai');\nINSERT INTO bank_schema.bank_txns (txnid, txndate, custid, amt, branch, region)\nVALUES \n(1003, '2026-04-02', 'CUST003', 500.25, 'Jayanagar', 'Bangalore');\nINSERT INTO bank_schema.bank_txns (txnid, txndate, custid, amt, branch, region)\nVALUES \n(1004, '2026-04-03', 'CUST001', 3200.00, 'T. Nagar', 'Chennai');\nINSERT INTO bank_schema.bank_txns (txnid, txndate, custid, amt, branch, region)\nVALUES \n(1005, '2026-04-05', 'CUST004', 120.00, 'Hitech City', 'Hyderabad');\n\n\nselect * from bank_schema.bank_txns;\n\n--update\nUPDATE bank_schema.bank_txns set amt = 2000 where branch = 'Jayanagar'\n\nselect * from bank_schema.bank_txns;\n\n\n--delete\nDELETE FROM bank_schema.bank_txns where txnid=1005;\n\nselect * from bank_schema.bank_txns;\n\n\n--HASH\n\nCreate table bank_schema.bank_txns_hash\n(\n    txnid int,\n    txndate date,\n    custid varchar(20),\n    amt float,\n    branch varchar(50),\n    region varchar(50)\n)\nWITH\n(\n    CLUSTERED COLUMNSTORE INDEX,  --large amount of data, compress and best of performance\n    DISTRIBUTION = HASH(region)  -- distributes data evenly across all nodes\n);\n\n--replicate\n\nCreate table bank_schema.bank_txns_replicate\n(\n    txnid int,\n    txndate date,\n    custid varchar(20),\n    amt float,\n    branch varchar(50),\n    region varchar(50)\n)\nWITH\n(\n    CLUSTERED COLUMNSTORE INDEX,  --large amount of data, compress and best of performance\n    DISTRIBUTION = REPLICATE  \n);\n\n\n--heap index\nCreate table bank_schema.bank_txns_heap_indx\n(\n    txnid int,\n    txndate date,\n    custid varchar(20),\n    amt float,\n    branch varchar(50),\n    region varchar(50)\n)\nWITH\n(\n    HEAP, \n    DISTRIBUTION = REPLICATE  \n);\n\n--clustered index\n\nCreate table bank_schema.bank_txns_cluster_indx\n(\n    txnid int,\n    txndate date,\n    custid varchar(20),\n    amt float,\n    branch varchar(50),\n    region varchar(50)\n)\nWITH\n(\n    CLUSTERED INDEX(region), \n    DISTRIBUTION = REPLICATE  \n);\n\nselect * from INFORMATION_SCHEMA.TABLES\n\n\n/*\n\nRow oriented data storage \ntxnid,txndate\n101,2026-01-01\n102,2026-01-01\n103,2026-01-01\n\nColumn oriented data storage\n101,102,103\n2026-01-01,2026-01-01,2026-01-01\n\n\n*/\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptez_ddw",
+						"poolName": "inceptez_ddw"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/7_Copy_Into')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "\nCREATE TABLE bank_schema.customerdata(\n    custid INT,\n    fname varchar(100),\n    lname varchar(100),\n    age int,\n    prof varchar(100)\n)\nWITH\n(\n     CLUSTERED COLUMNSTORE INDEX,\n     DISTRIBUTION = ROUND_ROBIN\n);\n\n\nCOPY INTO bank_schema.customerdata\nFROM 'https://batch25synapseadls.dfs.core.windows.net/raw/custdata.csv'\nWITH(\n    FILE_TYPE = 'CSV',\n    FIRSTROW = 2\n);\n\nselect * from bank_schema.customerdata;\n\n\nCreate table bank_schema.bank_txns_adls\n(\n    txnid varchar(20),\n    txndate date,\n    custid varchar(20),\n    amt float,\n    branch varchar(50),\n    region varchar(50)\n)\nWITH\n(\n    CLUSTERED COLUMNSTORE INDEX,  --large amount of data, compress and best of performance\n    DISTRIBUTION = HASH(region)  -- distributes data evenly across all nodes\n);\n\n--reading data from external storage account\n\nCOPY INTO bank_schema.bank_txns_adls\nFROM 'https://inceptezadlsbankdata.dfs.core.windows.net/bankdata/bank_txns.csv'\nWITH(\n    FILE_TYPE = 'CSV',\n    FIRSTROW = 2,\n    CREDENTIAL = (IDENTITY = 'Managed Identity')\n\n);\n\nselect * from bank_schema.bank_txns_adls;\n\n\n\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptez_dw",
+						"poolName": "inceptez_dw"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/8_External_Table')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "-- Step1: Creates a master key for encryption\nCREATE MASTER KEY ENCRYPTION BY PASSWORD = 'AzureInceptez@_123!';\n\n-- Step2: Create a credential using the Workspace Managed Identity\nCREATE DATABASE SCOPED CREDENTIAL wsidentity\nWITH IDENTITY = 'Managed Identity';\n\n--Step3: Create an External Data Source\nDROP EXTERNAL DATA SOURCE bankdata_src\nCREATE EXTERNAL DATA SOURCE bankdata_src\nWITH\n(\n    LOCATION = 'abfss://bankdata@inceptezadlsbankdata.dfs.core.windows.net/',\n    CREDENTIAL = wsidentity\n);\n\n--Step4: Create an External file format\nCREATE EXTERNAL FILE FORMAT bankdata_fileformat\nWITH\n(\n    FORMAT_TYPE = DELIMITEDTEXT,\n    FORMAT_OPTIONS (\n        FIELD_TERMINATOR = ',',\n        FIRST_ROW = 2\n    )\n);\n\n\nDROP EXTERNAL TABLE bank_schema.bank_txns_ext;\nCREATE EXTERNAL TABLE bank_schema.bank_txns_ext\n(\n    txnid varchar(10),\n    txndate date,\n    custid varchar(20),\n    amt float,\n    branch varchar(50),\n    region varchar(50),\n    payment_type varchar(20)\n)\nWITH\n(\n    LOCATION = 'bank_txns.csv',\n    DATA_SOURCE = bankdata_src,\n    FILE_FORMAT = bankdata_fileformat\n);\n\nselect * from bank_schema.bank_txns_ext;\n\n\n--insert int.. copy from external table to dedicated sql table\ninsert into bank_schema.bank_txns select txnid,txndate,custid,amt,branch,region from bank_schema.bank_txns_ext;\n\n--CTAS\nCREATE TABLE bank_schema.bank_txns1\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN\n)\nAS\nselect txnid,txndate,custid,amt,branch,region from bank_schema.bank_txns_ext;\n\nselect * from bank_schema.bank_txns1;\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptez_dw",
+						"poolName": "inceptez_dw"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/9_views')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "--Normal View\n\nCREATE VIEW bank_schema.vw_banktxndata\nAS\nselect * from bank_schema.bank_txns where region = 'Chennai';\n\nselect * from bank_schema.vw_banktxndata;\n\n--Materialized View\nCREATE MATERIALIZED VIEW bank_schema.vw_banktxndata_m\nWITH (DISTRIBUTION = ROUND_ROBIN)\nAS\nSELECT \n    region, \n    SUM(amt) AS total_amt,\n    COUNT_BIG(*) AS txncount,      -- Counts all rows in the group\n    COUNT_BIG(amt) AS amt_count    -- Counts only non-null values of 'amt'\nFROM bank_schema.bank_txns \nGROUP BY region;\n\nselect * from  bank_schema.vw_banktxndata_m;\n\nselect  region, SUM(amt) AS total_amt from bank_schema.bank_txns GROUP BY region;\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "inceptez_ddw",
+						"poolName": "inceptez_ddw"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 1')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "SELECT TOP (100) * FROM [hranalytics_db].[dbo].[dim_employee]",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "hranalytics_db",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Spark job definition 1')]",
+			"type": "Microsoft.Synapse/workspaces/sparkJobDefinitions",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"targetBigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"requiredSparkVersion": "3.5",
+				"language": "scala",
+				"scanFolder": false,
+				"jobProperties": {
+					"name": "Spark job definition 1",
+					"file": "abfss://raw@batch25synapseadls.dfs.core.windows.net/spark-workouts/Lab01-sparkbasics.py",
+					"className": "Lab01-sparkbasics.py",
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "1",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "a7b4be27-77c1-42bc-aae8-79a6a3c18f6d",
+						"spark.synapse.context.sjdname": "Spark job definition 1"
+					},
+					"args": [],
+					"jars": [],
+					"pyFiles": [
+						""
+					],
+					"files": [],
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/1_data_ingestion')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "HR-Analytics"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "a51be77e-7f0c-4c51-b14f-091c93b92874"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"source": [
+							"spark.sql(\"DROP DATABASE IF EXISTS hranalytics_db CASCADE\")"
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"#Step 1: Create Database\n",
+							"\n",
+							"spark.sql(\"CREATE DATABASE IF NOT EXISTS hranalytics_db\")\n",
+							"\n",
+							"spark.sql(\"\"\"CREATE TABLE hranalytics_db.dim_employee (\n",
+							"   emp_id STRING,\n",
+							"   name STRING,\n",
+							"   dept STRING,\n",
+							"   role STRING,\n",
+							"   location STRING,\n",
+							"   hire_date DATE,\n",
+							"   salary DOUBLE,\n",
+							"   status STRING,\n",
+							"   start_date DATE,\n",
+							"   end_date DATE,\n",
+							"   is_current BOOLEAN\n",
+							")\"\"\")\n",
+							"\n",
+							"#Step 2: Define Path\n",
+							"base_path = \"abfss://raw@batch25synapseadls.dfs.core.windows.net/hr-rawsource/\"\n",
+							"\n",
+							"#Step 3: Read CSV Files\n",
+							"employee_df = spark.read.format(\"csv\") \\\n",
+							"    .option(\"header\", True) \\\n",
+							"    .option(\"inferSchema\", True) \\\n",
+							"    .load(base_path + \"employee.csv\")\n",
+							"\n",
+							"performance_df = spark.read.format(\"csv\") \\\n",
+							"    .option(\"header\", True) \\\n",
+							"    .option(\"inferSchema\", True) \\\n",
+							"    .load(base_path + \"performance.csv\")\n",
+							"\n",
+							"survey_df = spark.read.format(\"csv\") \\\n",
+							"    .option(\"header\", True) \\\n",
+							"    .option(\"inferSchema\", True) \\\n",
+							"    .load(base_path + \"survey.csv\")\n",
+							"\n",
+							"exit_df = spark.read.format(\"csv\") \\\n",
+							"    .option(\"header\", True) \\\n",
+							"    .option(\"inferSchema\", True) \\\n",
+							"    .load(base_path + \"exit.csv\")\n",
+							"\n",
+							"#Step 4: Add Bronze Metadata Columns\n",
+							"from pyspark.sql.functions import current_timestamp, lit\n",
+							"\n",
+							"def add_bronze_columns(df, source_name):\n",
+							"    return df.withColumn(\"ingestion_time\", current_timestamp()) \\\n",
+							"             .withColumn(\"source_file\", lit(source_name))\n",
+							"\n",
+							"employee_df = add_bronze_columns(employee_df, \"employee.csv\")\n",
+							"performance_df = add_bronze_columns(performance_df, \"performance.csv\")\n",
+							"survey_df = add_bronze_columns(survey_df, \"survey.csv\")\n",
+							"exit_df = add_bronze_columns(exit_df, \"exit.csv\")\n",
+							"\n",
+							"#Step 5: Write to Bronze Tables (Delta)\n",
+							"employee_df.write.format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .saveAsTable(\"hranalytics_db.bronze_employee\")\n",
+							"\n",
+							"performance_df.write.format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .saveAsTable(\"hranalytics_db.bronze_performance\")\n",
+							"\n",
+							"survey_df.write.format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .saveAsTable(\"hranalytics_db.bronze_survey\")\n",
+							"\n",
+							"exit_df.write.format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .saveAsTable(\"hranalytics_db.bronze_exit\")\n",
+							"\n",
+							"#Step 6: Validate\n",
+							"spark.sql(\"SELECT COUNT(*) FROM hranalytics_db.bronze_employee\").show()\n",
+							"spark.sql(\"SELECT COUNT(*) FROM hranalytics_db.bronze_performance\").show()\n",
+							"spark.sql(\"SELECT COUNT(*) FROM hranalytics_db.bronze_survey\").show()\n",
+							"spark.sql(\"SELECT COUNT(*) FROM hranalytics_db.bronze_exit\").show()\n",
+							"\n",
+							""
+						],
+						"outputs": []
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/1_spark_basics')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "4199833a-2697-428b-82f7-a41a8b0be392"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "markdown",
+						"metadata": {
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"# Sales Data Analysis using Spark\n",
+							"\n",
+							"## Objective\n",
+							"Analyze sales trends\n",
+							"\n",
+							"### Steps\n",
+							"- Load data from ADLS\n",
+							"- Transform using Spark\n",
+							"- Generate KPIs\n",
+							"\n",
+							"### Code\n",
+							"\n",
+							"```python\n",
+							"df = spark.read.csv(\"abfss://container/file.csv\")\n",
+							"print(\"Hello\") \n",
+							"print(\"World\")\n",
+							"```\n",
+							""
+						]
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"from pyspark.sql import SparkSession\n",
+							"\n",
+							"# Create a SparkSession\n",
+							"spark1 = SparkSession.builder.appName(\"synapseworkouts\").getOrCreate()\n",
+							"data = [\n",
+							"    (1, \"Rajesh\", 25),\n",
+							"    (2, \"Vimal\", 30),\n",
+							"    (3, \"Charlie\", 35),\n",
+							"    (4, \"David\", 40)\n",
+							"]\n",
+							"\n",
+							"df = spark.createDataFrame(data, [\"id\", \"name\", \"age\"])\n",
+							"df.show()"
+						],
+						"outputs": [],
+						"execution_count": 2
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"#Read from Data Lake\n",
+							"df = spark.read.format(\"csv\").option(\"inferschema\",True).load(\"abfss://raw@batch25synapseadls.dfs.core.windows.net/txns\") \\\n",
+							".toDF(\"txnid\",\"txndate\",\"custid\",\"amount\",\"category\",\"product\",\"city\",\"state\",\"paytype\")\n",
+							"df.printSchema()\n",
+							"df.show()"
+						],
+						"outputs": [],
+						"execution_count": 3
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"df1 = df.filter(\"state = 'Texas' and paytype = 'credit'\")\n",
+							"df1.show()"
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"from pyspark.sql.functions import count,sum,round\n",
+							"df1 = df.groupBy(\"state\").agg(count(\"txnid\").alias(\"TotalTrans\"),round(sum(\"amount\"),2).alias(\"TotalSales\"))\n",
+							"df1.show()"
+						],
+						"outputs": [],
+						"execution_count": 5
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"#Write into ADLS\n",
+							"df1.write.format(\"parquet\").save(\"abfss://raw@batch25synapseadls.dfs.core.windows.net/salesreport\")\n",
+							"print(\"Data Written into Data Lake\")"
+						],
+						"outputs": [],
+						"execution_count": 6
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/2_data_process')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "HR-Analytics"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "cc1286ad-cdc2-485e-ab13-3123975f7ec9"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "markdown",
+						"metadata": {
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"\n",
+							"### Objective of Silver Layer\n",
+							"- Clean nulls & invalid data\n",
+							"- Standardize column names & formats\n",
+							"- Deduplicate records\n",
+							"- Join datasets for analytics-ready structure\n",
+							""
+						]
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"\n",
+							"#Step 1: Read Bronze Tables\n",
+							"employee_df = spark.read.table(\"hranalytics_db.bronze_employee\")\n",
+							"performance_df = spark.read.table(\"hranalytics_db.bronze_performance\")\n",
+							"survey_df = spark.read.table(\"hranalytics_db.bronze_survey\")\n",
+							"exit_df = spark.read.table(\"hranalytics_db.bronze_exit\")\n",
+							"\n",
+							"#Step 2: Standardize Column Names\n",
+							"from pyspark.sql.functions import col\n",
+							"\n",
+							"def standardize_columns(df):\n",
+							"    for c in df.columns:\n",
+							"        df = df.withColumnRenamed(c, c.strip().lower().replace(\" \", \"_\"))        \n",
+							"    \n",
+							"    #drop columns\n",
+							"    df = df.drop(\"ingestion_time\", \"source_file\")\n",
+							"    return df\n",
+							"\n",
+							"employee_df = standardize_columns(employee_df)\n",
+							"performance_df = standardize_columns(performance_df)\n",
+							"survey_df = standardize_columns(survey_df)\n",
+							"exit_df = standardize_columns(exit_df)\n",
+							"\n",
+							"#Step 3: Data Cleaning\n",
+							"# Employee Cleaning\n",
+							"from pyspark.sql.functions import when\n",
+							"\n",
+							"employee_clean = employee_df.dropDuplicates([\"emp_id\"]) \\\n",
+							"    .withColumn(\"salary\", col(\"salary\").cast(\"double\")) \\\n",
+							"    .fillna({\n",
+							"        \"dept\": \"Unknown\",\n",
+							"        \"role\": \"Unknown\"\n",
+							"    }) \\\n",
+							"    .filter(col(\"emp_id\").isNotNull())\n",
+							"\n",
+							"#Performance Cleaning\n",
+							"performance_clean = performance_df.dropDuplicates() \\\n",
+							"    .withColumn(\"rating\", col(\"rating\").cast(\"int\")) \\\n",
+							"    .filter(col(\"emp_id\").isNotNull())\n",
+							"\n",
+							"#Survey Cleaning (eNPS prep)\n",
+							"survey_clean = survey_df.dropDuplicates() \\\n",
+							"    .withColumn(\"survey_score\", col(\"survey_score\").cast(\"int\")) \\\n",
+							"    .withColumn(\"enps_category\",\n",
+							"        when(col(\"survey_score\") >= 9, \"Promoter\")\n",
+							"        .when(col(\"survey_score\") >= 5, \"Passive\")\n",
+							"        .otherwise(\"Detractor\")\n",
+							"    )\n",
+							"\n",
+							"#Exit Data Cleaning\n",
+							"exit_clean = exit_df.dropDuplicates() \\\n",
+							"    .filter(col(\"emp_id\").isNotNull()) \\\n",
+							"    .withColumnRenamed(\"reason\", \"exit_reason\")"
+						],
+						"outputs": [],
+						"execution_count": 1
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"employee_clean.write.format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .option(\"overwriteSchema\", \"true\") \\\n",
+							"    .saveAsTable(\"hranalytics_db.silver_employee\")\n",
+							"\n",
+							"performance_clean.write.format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .option(\"overwriteSchema\", \"true\") \\\n",
+							"    .saveAsTable(\"hranalytics_db.silver_performance\")\n",
+							"\n",
+							"survey_clean.write.format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .option(\"overwriteSchema\", \"true\") \\\n",
+							"    .saveAsTable(\"hranalytics_db.silver_survey\")\n",
+							"\n",
+							"exit_clean.write.format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .option(\"overwriteSchema\", \"true\") \\\n",
+							"    .saveAsTable(\"hranalytics_db.silver_exit\")"
+						],
+						"outputs": [],
+						"execution_count": 2
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/2_read_external_storage')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "649a723c-ba72-46bd-bc66-17d509509b26"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "markdown",
+						"metadata": {
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"### Read data from external storage account using Managed Identity"
+						]
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"#Read from data lake(External Storage) using Managed Identity\n",
+							"\n",
+							"#Provide Storage blob data contributor access to the synapse workspace idenitity\n",
+							"\n",
+							"# Ensure the path matches the account name above\n",
+							"path = \"abfss://bankdata@inceptezadlsbankdata.dfs.core.windows.net/bank_txns.csv\"\n",
+							"\n",
+							"df = spark.read.format(\"csv\") \\\n",
+							"    .option(\"header\", True) \\\n",
+							"    .option(\"inferSchema\", True) \\\n",
+							"    .load(path)\n",
+							"df.show()"
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "markdown",
+						"metadata": {
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"1. ### Read data from external storage account using linkedservice"
+						]
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"# set the linkedservice\n",
+							"spark.conf.set(\"spark.storage.synapse.inceptezadlsbankdata.linkedServiceName\", \"AzureDataLakeStorage1\")\n",
+							"\n",
+							"\n",
+							"path = \"abfss://bankdata@inceptezadlsbankdata.dfs.core.windows.net/bank_txns.csv\"\n",
+							"\n",
+							"df = spark.read.format(\"csv\") \\\n",
+							"    .option(\"header\", True) \\\n",
+							"    .option(\"inferSchema\", True) \\\n",
+							"    .load(path)\n",
+							"df.show()"
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"# set the linkedservice\n",
+							"spark.conf.set(\"spark.storage.synapse.inceptezloandata.linkedServiceName\", \"ls_loandata\")\n",
+							"\n",
+							"\n",
+							"path = \"abfss://loandata@inceptezloandata.dfs.core.windows.net/loan_txns.csv\"\n",
+							"\n",
+							"df = spark.read.format(\"csv\") \\\n",
+							"    .option(\"header\", True) \\\n",
+							"    .option(\"inferSchema\", True) \\\n",
+							"    .load(path)\n",
+							"df.show()"
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "markdown",
+						"metadata": {
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"### Read data from external storage account using SAS token"
+						]
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"sas_token = \"?sv=2025-11-05&ss=bfqt&srt=sco&sp=rwdlacupyx&se=2026-04-16T10:35:02Z&st=2026-04-16T02:20:02Z&spr=https&sig=FH9pQzJMkmO%2Fef9G2V88QL21WBTL9qfmU5IhHvJlHWk%3D\"\n",
+							"\n",
+							"spark.conf.set(f\"fs.azure.account.auth.type.inceptezloandata.dfs.core.windows.net\", \"SAS\")\n",
+							"spark.conf.set(f\"fs.azure.sas.token.provider.type.inceptezloandata.dfs.core.windows.net\", \n",
+							"               \"com.microsoft.azure.synapse.tokenlibrary.ConfBasedSASProvider\")\n",
+							"spark.conf.set(f\"spark.storage.synapse.loandata.inceptezloandata.dfs.core.windows.net.sas\", sas_token)\n",
+							"\n",
+							"path = \"abfss://loandata@inceptezloandata.dfs.core.windows.net/loan_txns.csv\"\n",
+							"\n",
+							"df = spark.read.format(\"csv\") \\\n",
+							"    .option(\"header\", True) \\\n",
+							"    .option(\"inferSchema\", True) \\\n",
+							"    .load(path)\n",
+							"df.show()"
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"sas_token = \"?sv=2025-11-05&ss=bfqt&srt=sco&sp=rwdlacupyx&se=2026-04-16T10:38:00Z&st=2026-04-16T02:23:00Z&spr=https&sig=NmnH%2BI2s5FYRvFCOd0cDP6uAKPZ4IQ%2BS1Vx%2F8s7ezOk%3D\"\n",
+							"\n",
+							"spark.conf.set(f\"fs.azure.account.auth.type.inceptezloandata.dfs.core.windows.net\", \"SAS\")\n",
+							"spark.conf.set(f\"fs.azure.sas.token.provider.type.inceptezloandata.dfs.core.windows.net\", \n",
+							"               \"com.microsoft.azure.synapse.tokenlibrary.ConfBasedSASProvider\")\n",
+							"spark.conf.set(f\"spark.storage.synapse.loandata.inceptezloandata.dfs.core.windows.net.sas\", sas_token)\n",
+							"\n",
+							"path = \"abfss://bankdata@inceptezadlsbankdata.dfs.core.windows.net/bank_txns.csv\"\n",
+							"\n",
+							"df = spark.read.format(\"csv\") \\\n",
+							"    .option(\"header\", True) \\\n",
+							"    .option(\"inferSchema\", True) \\\n",
+							"    .load(path)\n",
+							"df.show()"
+						],
+						"outputs": [],
+						"execution_count": 12
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/3_dim_emp_scd2')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "HR-Analytics"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "e2b36e36-407a-418b-a765-e2ed71df93bd"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"source": [
+							"#Step 1: Read Tables\n",
+							"from pyspark.sql.functions import current_date, lit, col\n",
+							"\n",
+							"df = spark.table(\"hranalytics_db.silver_employee\").alias(\"src\")\n",
+							"dim_df = spark.table(\"hranalytics_db.dim_employee\").alias(\"tgt\")\n",
+							"\n",
+							"#Step 2: Detect Changed Records\n",
+							"changed_df = df.join(dim_df, col(\"src.emp_id\") == col(\"tgt.emp_id\")) \\\n",
+							"   .filter(\n",
+							"       (col(\"tgt.is_current\") == True) & (\n",
+							"           (col(\"src.salary\") != col(\"tgt.salary\")) |\n",
+							"           (col(\"src.role\") != col(\"tgt.role\")) |\n",
+							"           (col(\"src.dept\") != col(\"tgt.dept\")) |\n",
+							"           (col(\"src.location\") != col(\"tgt.location\"))\n",
+							"       )\n",
+							"   ).select(\"src.*\")\n",
+							"\n",
+							"#Step 3: Detect New Employees (Insert)\n",
+							"new_df = df.join(dim_df, \"emp_id\", \"left_anti\")\n",
+							"\n",
+							"#Step 4: Expire Old Records\n",
+							"expired_df = dim_df.alias(\"tgt\") \\\n",
+							"   .join(changed_df.alias(\"src\"), \"emp_id\") \\\n",
+							"   .filter(col(\"tgt.is_current\") == True) \\\n",
+							"   .select(\"tgt.*\") \\\n",
+							"   .withColumn(\"end_date\", current_date()) \\\n",
+							"   .withColumn(\"is_current\", lit(False))\n",
+							"expired_df.printSchema()\n",
+							"\n",
+							"#Step 5: Prepare New Records (for both changed + new)\n",
+							"insert_df = changed_df.union(new_df) \\\n",
+							"   .withColumn(\"start_date\", current_date()) \\\n",
+							"   .withColumn(\"end_date\", lit(None)) \\\n",
+							"   .withColumn(\"is_current\", lit(True))\n",
+							"insert_df.printSchema()\n",
+							"\n",
+							"#Final Merge Logic\n",
+							"# Keep unchanged records\n",
+							"unchanged_df = dim_df.alias(\"tgt\") \\\n",
+							"   .join(changed_df.alias(\"src\"), \"emp_id\", \"left_anti\")\n",
+							"unchanged_df.printSchema()\n",
+							"\n",
+							"# Final dataset\n",
+							"final_df = unchanged_df.union(expired_df).union(insert_df)\n",
+							"\n",
+							"# Write to temp\n",
+							"final_df.write.mode(\"overwrite\").saveAsTable(\"hranalytics_db.employee_tmp\")\n",
+							"\n",
+							"#Write back\n",
+							"df_tmp = spark.table(\"hranalytics_db.employee_tmp\")\n",
+							"df_tmp.write.mode(\"overwrite\").saveAsTable(\"hranalytics_db.dim_employee\")\n",
+							""
+						],
+						"outputs": [],
+						"execution_count": 1
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/3_mssparkutils')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "06f374d4-c514-43e3-8f05-3b86a11450d7"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "markdown",
+						"metadata": {
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"### mssparkutils - File System(mssparkutils.fs)"
+						]
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"#List files\n",
+							"from notebookutils import mssparkutils\n",
+							"lst = mssparkutils.fs.ls(\"abfss://raw@batch25synapseadls.dfs.core.windows.net\")"
+						],
+						"outputs": [],
+						"execution_count": 13
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"#View file content\n",
+							"mssparkutils.fs.head(\"abfss://raw@batch25synapseadls.dfs.core.windows.net/Unemployment.csv\")"
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"#Copy file\n",
+							"mssparkutils.fs.cp(\"abfss://raw@batch25synapseadls.dfs.core.windows.net/orders.json\", \"abfss://raw@batch25synapseadls.dfs.core.windows.net/retaildata/\")"
+						],
+						"outputs": [],
+						"execution_count": 15
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"#Delete file\n",
+							"mssparkutils.fs.rm(\"abfss://raw@batch25synapseadls.dfs.core.windows.net/retaildata/orders.json\")"
+						],
+						"outputs": [],
+						"execution_count": 16
+					},
+					{
+						"cell_type": "markdown",
+						"metadata": {
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"### mssparkutils - Notebook(mssparkutils.notebook)"
+						]
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"#Run another notebook\n",
+							"mssparkutils.notebook.run(\"4_childnb\",60)\n",
+							""
+						],
+						"outputs": [],
+						"execution_count": 1
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"mssparkutils.notebook.run(\"4_childnb\",60, {\"p1\":\"100\",\"p2\":\"250\"})"
+						],
+						"outputs": [],
+						"execution_count": 3
+					},
+					{
+						"cell_type": "markdown",
+						"metadata": {
+							"nteract": {
+								"transient": {
+									"deleting": false
+								}
+							}
+						},
+						"source": [
+							"### Mounting the file path"
+						]
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"from notebookutils import mssparkutils \n",
+							"\n",
+							"#Unmount\n",
+							"mssparkutils.fs.unmount(\"/bankmnt\")\n",
+							"# Mount the container\n",
+							"mssparkutils.fs.mount(\"abfss://bankdata@inceptezadlsbankdata.dfs.core.windows.net\", \"/bankmnt\")\n",
+							"job_id = mssparkutils.env.getJobId()\n",
+							"df = spark.read.format('csv').option(\"header\",True).load('synfs:/notebook/'+ job_id + '/bankmnt/')\n",
+							"df.show()"
+						],
+						"outputs": []
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/4_build_fact_table')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "HR-Analytics"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "7aaa3d81-b6e7-467e-8f98-995641dbc6b7"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"source": [
+							"#Step 1: Read Silver Tables\n",
+							"\n",
+							"from pyspark.sql.functions import col, when, lit\n",
+							"\n",
+							"# Read Silver tables\n",
+							"emp_df = spark.table(\"hranalytics_db.silver_employee\")\n",
+							"perf_df = spark.table(\"hranalytics_db.silver_performance\")\n",
+							"survey_df = spark.table(\"hranalytics_db.silver_survey\")\n",
+							"exit_df = spark.table(\"hranalytics_db.silver_exit\")\n",
+							"\n",
+							"#Step 2: Read Current Dimension (SCD2)\n",
+							"#Always use only current records\n",
+							"dim_df = spark.table(\"hranalytics_db.dim_employee\") \\\n",
+							"              .filter(col(\"is_current\") == True)\n",
+							"\n",
+							"#Step 3: Join All Sources\n",
+							"fact_df = dim_df.alias(\"d\") \\\n",
+							"    .join(perf_df.alias(\"p\"), col(\"d.emp_id\") == col(\"p.emp_id\"), \"left\") \\\n",
+							"    .join(survey_df.alias(\"s\"), col(\"d.emp_id\") == col(\"s.emp_id\"), \"left\") \\\n",
+							"    .join(exit_df.alias(\"e\"), col(\"d.emp_id\") == col(\"e.emp_id\"), \"left\")\n",
+							"\n",
+							"\n",
+							"#Step 4: Derive Metrics Columns\n",
+							"\n",
+							"fact_df = fact_df.select(\n",
+							"    col(\"d.emp_id\").alias(\"emp_sk\"),\n",
+							"    col(\"p.rating\"),\n",
+							"    col(\"s.survey_score\"),\n",
+							"    col(\"p.review_date\"),\n",
+							"    col(\"s.survey_date\"),\n",
+							"    col(\"e.exit_date\"),\n",
+							"    \n",
+							"    # Attrition Flag\n",
+							"    when(col(\"e.emp_id\").isNotNull(), lit(1)).otherwise(lit(0)).alias(\"attrition_flag\"),\n",
+							"    \n",
+							"    # Engagement Bucket\n",
+							"    when(col(\"s.survey_score\") >= 8, \"High\")\n",
+							"    .when(col(\"s.survey_score\") >= 5, \"Medium\")\n",
+							"    .otherwise(\"Low\").alias(\"engagement_level\"),\n",
+							"    \n",
+							"    # Risk Flag (Early Churn Detection)\n",
+							"    when((col(\"p.rating\") <= 2) & (col(\"s.survey_score\") <= 5), 1)\n",
+							"    .otherwise(0).alias(\"churn_risk_flag\")\n",
+							")\n",
+							"\n",
+							"#Step 5: Handle Duplicates (Important)\n",
+							"\n",
+							"#If multiple records per employee (e.g., multiple reviews)\n",
+							"\n",
+							"from pyspark.sql.window import Window\n",
+							"from pyspark.sql.functions import row_number\n",
+							"\n",
+							"window_spec = Window.partitionBy(\"emp_sk\").orderBy(col(\"review_date\").desc())\n",
+							"\n",
+							"fact_df = fact_df.withColumn(\"rn\", row_number().over(window_spec)) \\\n",
+							"                 .filter(col(\"rn\") == 1) \\\n",
+							"                 .drop(\"rn\")\n",
+							"\n",
+							"#Step 6: Write to Gold Layer\n",
+							"fact_df.write.mode(\"overwrite\").saveAsTable(\"hranalytics_db.fact_employee_metrics\")\n",
+							"\n",
+							""
+						],
+						"outputs": [],
+						"execution_count": 2
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/4_childnb')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "cfca1ff5-9261-4673-976f-5e08afe0b9c4"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {
+							"tags": [
+								"parameters"
+							]
+						},
+						"source": [
+							"# Create a cell at the top.\n",
+							"\n",
+							"# Define your variables: folder_name = \"default\"\n",
+							"\n",
+							"# Click the ... on the cell and select Toggle parameter cell.\n",
+							"p1 = \"\"\n",
+							"p2 = \"\""
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"print(\"Hi\")\n",
+							"#access parameter\n",
+							"print(f\"The value is: {p1}\")\n",
+							"print(f\"The value is: {p2}\")\n",
+							""
+						],
+						"outputs": []
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/5_kpi_analytics')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "HR-Analytics"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "43f6a278-de4d-43cd-bbb9-18981cac2ed3"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": false,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "python"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net"
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"automaticScaleJobs": false
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"--Attrition Rate\n",
+							"SELECT \n",
+							"    'Attrition Rate' as metrics_name, \n",
+							"    COUNT(CASE WHEN attrition_flag = 1 THEN 1 END) * 100.0 / COUNT(*) AS metrics_value\n",
+							"FROM hranalytics_db.fact_employee_metrics;"
+						],
+						"outputs": [],
+						"execution_count": 2
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"--Resignation Drivers\n",
+							"SELECT exit_reason, COUNT(*) AS cnt\n",
+							"FROM hranalytics_db.silver_exit\n",
+							"GROUP BY exit_reason\n",
+							"ORDER BY cnt DESC;"
+						],
+						"outputs": [],
+						"execution_count": 3
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"--Engagement Score\n",
+							"SELECT AVG(survey_score) AS avg_engagement\n",
+							"FROM hranalytics_db.fact_employee_metrics;\n",
+							"\n",
+							"--eNPS Score\n",
+							"SELECT \n",
+							"    (COUNT(CASE WHEN survey_score >= 9 THEN 1 END) -\n",
+							"     COUNT(CASE WHEN survey_score <= 6 THEN 1 END)) * 100.0 / COUNT(*) AS eNPS\n",
+							"FROM hranalytics_db.fact_employee_metrics;\n",
+							"\n",
+							"--Early Churn Detection\n",
+							"SELECT emp_sk\n",
+							"FROM hranalytics_db.fact_employee_metrics\n",
+							"WHERE rating < 2 AND survey_score < 5;\n",
+							"\n",
+							""
+						],
+						"outputs": [],
+						"execution_count": 5
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/5_sql_process')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "25d32ca6-db37-46f9-b97d-a2430afd4df9"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"--Create database\n",
+							"CREATE DATABASE inceptez_salesdb;\n",
+							""
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"\n",
+							"DESCRIBE DATABASE EXTENDED inceptez_salesdb;"
+						],
+						"outputs": [],
+						"execution_count": 2
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"spark.sql(\"CREATE DATABASE inceptez_salesdb\")"
+						],
+						"outputs": []
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"\n",
+							"--Create CSV Managed Table\n",
+							"CREATE TABLE IF NOT EXISTS inceptez_salesdb.Orders (\n",
+							"    OrderId INT,\n",
+							"    Product STRING,\n",
+							"    Amount DOUBLE\n",
+							")\n",
+							"USING CSV;"
+						],
+						"outputs": [],
+						"execution_count": 14
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"\n",
+							"--Create Parquet Managed Table\n",
+							"CREATE TABLE IF NOT EXISTS inceptez_salesdb.Orders_parquet (\n",
+							"    OrderId INT,\n",
+							"    Product STRING,\n",
+							"    Amount DOUBLE\n",
+							")\n",
+							"USING PARQUET;"
+						],
+						"outputs": [],
+						"execution_count": 15
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"\n",
+							"--Create delta Managed Table\n",
+							"CREATE TABLE IF NOT EXISTS inceptez_salesdb.Orders_delta (\n",
+							"    OrderId INT,\n",
+							"    Product STRING,\n",
+							"    Amount DOUBLE\n",
+							")\n",
+							"USING DELTA;"
+						],
+						"outputs": [],
+						"execution_count": 16
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"\n",
+							"insert into inceptez_salesdb.Orders_delta values(100,'Food',200);"
+						],
+						"outputs": [],
+						"execution_count": 17
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"\n",
+							"select * from inceptez_salesdb.Orders_delta;"
+						],
+						"outputs": [],
+						"execution_count": 3
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"describe table extended  inceptez_salesdb.Orders_delta"
+						],
+						"outputs": [],
+						"execution_count": 22
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"mssparkutils.fs.ls(\"abfss://raw@batch25synapseadls.dfs.core.windows.net/synapse/workspaces/inceptezsynapse-ws/warehouse/inceptez_salesdb.db/orders_delta\")"
+						],
+						"outputs": [],
+						"execution_count": 23
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"--create external table\n",
+							"CREATE TABLE IF NOT EXISTS inceptez_salesdb.Orders_external (\n",
+							"    OrderId INT,\n",
+							"    Product STRING,\n",
+							"    Amount DOUBLE\n",
+							")\n",
+							"USING DELTA\n",
+							"LOCATION 'abfss://raw@batch25synapseadls.dfs.core.windows.net/synapse/workspaces/inceptezsynapse-ws/warehouse/inceptez_salesdb.db/orders_delta'"
+						],
+						"outputs": [],
+						"execution_count": 24
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"select * from inceptez_salesdb.Orders_external"
+						],
+						"outputs": [],
+						"execution_count": 4
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"DESCRIBE TABLE FORMATTED inceptez_salesdb.Orders_external;"
+						],
+						"outputs": [],
+						"execution_count": 25
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"select * from csv.`abfss://raw@batch25synapseadls.dfs.core.windows.net/custdata.csv`;\n",
+							"\n",
+							"select * from delta.`abfss://raw@batch25synapseadls.dfs.core.windows.net/synapse/workspaces/inceptezsynapse-ws/warehouse/inceptez_salesdb.db/orders_delta`;\n",
+							""
+						],
+						"outputs": [],
+						"execution_count": 14
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"-- Step 1: Create the empty table with your schema\n",
+							"CREATE TABLE inceptez_salesdb.tbl_custdata_csv (\n",
+							"    custid STRING,\n",
+							"    fname STRING,\n",
+							"    lname STRING,\n",
+							"    age STRING,\n",
+							"    prof STRING\n",
+							")\n",
+							"USING CSV;\n",
+							"\n",
+							"-- Step 2: Insert the data into the defined table\n",
+							"INSERT INTO inceptez_salesdb.tbl_custdata_csv\n",
+							"SELECT * FROM csv.`abfss://raw@batch25synapseadls.dfs.core.windows.net/custdata.csv`;"
+						],
+						"outputs": [],
+						"execution_count": 12
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/6_read_serverless_table')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "cc64b879-6274-4f96-95f5-328100247c7e"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1",
+						"state": {
+							"3b2afd87-d9a1-4a96-8f25-0669a55640ac": {
+								"type": "Synapse.DataFrame",
+								"sync_state": {
+									"table": {
+										"rows": [
+											{
+												"0": "TXN0001",
+												"1": "2025-10-01",
+												"2": "C0001",
+												"3": "18780.0",
+												"4": "Branch-C",
+												"5": "East",
+												"6": "Cash"
+											},
+											{
+												"0": "TXN0002",
+												"1": "2025-10-15",
+												"2": "C0002",
+												"3": "3293.0",
+												"4": "Branch-D",
+												"5": "West",
+												"6": "Card"
+											},
+											{
+												"0": "TXN0003",
+												"1": "2025-10-04",
+												"2": "C0003",
+												"3": "15543.0",
+												"4": "Branch-C",
+												"5": "East",
+												"6": "Card"
+											},
+											{
+												"0": "TXN0004",
+												"1": "2025-10-15",
+												"2": "C0004",
+												"3": "91749.0",
+												"4": "Branch-D",
+												"5": "West",
+												"6": "NetBanking"
+											},
+											{
+												"0": "TXN0005",
+												"1": "2025-10-04",
+												"2": "C0005",
+												"3": "90212.0",
+												"4": "Branch-A",
+												"5": "South",
+												"6": "Card"
+											},
+											{
+												"0": "TXN0006",
+												"1": "2025-10-02",
+												"2": "C0006",
+												"3": "34765.0",
+												"4": "Branch-A",
+												"5": "South",
+												"6": "Cash"
+											},
+											{
+												"0": "TXN0007",
+												"1": "2025-10-03",
+												"2": "C0007",
+												"3": "52588.0",
+												"4": "Branch-D",
+												"5": "West",
+												"6": "NetBanking"
+											},
+											{
+												"0": "TXN0008",
+												"1": "2025-10-26",
+												"2": "C0008",
+												"3": "78851.0",
+												"4": "Branch-B",
+												"5": "North",
+												"6": "UPI"
+											},
+											{
+												"0": "TXN0009",
+												"1": "2025-10-05",
+												"2": "C0009",
+												"3": "63295.0",
+												"4": "Branch-D",
+												"5": "West",
+												"6": "NetBanking"
+											},
+											{
+												"0": "TXN0010",
+												"1": "2025-10-27",
+												"2": "C0010",
+												"3": "49826.0",
+												"4": "Branch-B",
+												"5": "North",
+												"6": "UPI"
+											}
+										],
+										"schema": [
+											{
+												"key": "0",
+												"name": "txn_id",
+												"type": "string"
+											},
+											{
+												"key": "1",
+												"name": "txn_date",
+												"type": "string"
+											},
+											{
+												"key": "2",
+												"name": "cust_id",
+												"type": "string"
+											},
+											{
+												"key": "3",
+												"name": "amount",
+												"type": "double"
+											},
+											{
+												"key": "4",
+												"name": "branch",
+												"type": "string"
+											},
+											{
+												"key": "5",
+												"name": "region",
+												"type": "string"
+											},
+											{
+												"key": "6",
+												"name": "payment_type",
+												"type": "string"
+											}
+										],
+										"truncated": false
+									},
+									"isSummary": false,
+									"language": "scala",
+									"wranglerEntryContext": {
+										"dataframeType": "pyspark"
+									}
+								},
+								"persist_state": {
+									"view": {
+										"type": "details",
+										"chartOptions": {
+											"chartType": "bar",
+											"aggregationType": "sum",
+											"categoryFieldKeys": [
+												"0"
+											],
+											"seriesFieldKeys": [
+												"3"
+											],
+											"isStacked": false
+										}
+									}
+								}
+							}
+						}
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"serverless_endpoint = \"inceptezsynapse-ws-ondemand.sql.azuresynapse.net\"\n",
+							"database_name = \"inceptezdb\"\n",
+							"table_name = \"dbo.ext_bankdata\"\n",
+							"\n",
+							"# 2. Build the JDBC URL\n",
+							"jdbc_url = f\"jdbc:sqlserver://{serverless_endpoint}:1433;database={database_name};encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.sql.azuresynapse.net;loginTimeout=30;\"\n",
+							"\n",
+							"# 3. Read the table into a DataFrame\n",
+							"df = spark.read \\\n",
+							"    .format(\"com.microsoft.sqlserver.jdbc.spark\") \\\n",
+							"    .option(\"url\", jdbc_url) \\\n",
+							"    .option(\"dbtable\", table_name) \\\n",
+							"    .load()\n",
+							"\n",
+							"# Show the data\n",
+							"display(df.limit(10))"
+						],
+						"outputs": [],
+						"execution_count": 2
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/7_read_dedicated_table')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "inceptezspark",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"runAsWorkspaceSystemIdentity": false,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "35f726bc-2c9a-44b9-91a9-101d8ac7415f"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"synapse_widget": {
+						"version": "0.1"
+					},
+					"enableDebugMode": false,
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/660da862-ec29-4eb2-a8b7-c87550e4277d/resourceGroups/inceptez-synapse-rg/providers/Microsoft.Synapse/workspaces/inceptezsynapse-ws/bigDataPools/inceptezspark",
+						"name": "inceptezspark",
+						"type": "Spark",
+						"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net",
+							"authHeader": null
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": null
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"source": [
+							"# 1. Define the table reference\n",
+							"# Use the format: <DatabaseName>.<SchemaName>.<TableName>\n",
+							"dedicated_table = \"your_dedicated_pool_db.dbo.bank_transactions\"\n",
+							"\n",
+							"# 2. Read the dedicated table into a Spark DataFrame\n",
+							"df = spark.read.synapsesql(dedicated_table)\n",
+							"\n",
+							"# Show data\n",
+							"display(df.limit(10))"
+						],
+						"outputs": []
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/inceptezspark')]",
+			"type": "Microsoft.Synapse/workspaces/bigDataPools",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"autoPause": {
+					"enabled": true,
+					"delayInMinutes": 15
+				},
+				"autoScale": {
+					"enabled": false,
+					"maxNodeCount": 10,
+					"minNodeCount": 3
+				},
+				"nodeCount": 3,
+				"nodeSize": "Small",
+				"nodeSizeFamily": "MemoryOptimized",
+				"sparkVersion": "3.5",
+				"isComputeIsolationEnabled": false,
+				"sessionLevelPackagesEnabled": false,
+				"annotations": []
+			},
+			"dependsOn": [],
+			"location": "centralindia"
+		}
+	]
+}
