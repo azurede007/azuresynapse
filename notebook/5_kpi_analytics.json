@@ -21,15 +21,16 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "a85afc0e-c5e7-4939-8456-f5ce750b7fcf"
+				"spark.autotune.trackingId": "db53db0f-d78d-4623-8983-35ce83dcf46f"
 			}
 		},
 		"metadata": {
 			"saveOutput": true,
-			"synapse_widget": {
-				"version": "0.1"
-			},
 			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "python"
+			},
 			"language_info": {
 				"name": "python"
 			},
@@ -40,14 +41,13 @@
 				"endpoint": "https://inceptezsynapse-ws.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/inceptezspark",
 				"auth": {
 					"type": "AAD",
-					"authResource": "https://dev.azuresynapse.net",
-					"authHeader": null
+					"authResource": "https://dev.azuresynapse.net"
 				},
 				"sparkVersion": "3.5",
 				"nodeCount": 3,
 				"cores": 4,
 				"memory": 28,
-				"extraHeader": null
+				"automaticScaleJobs": false
 			},
 			"sessionKeepAliveTimeout": 30
 		},
@@ -112,6 +112,7 @@
 					"SELECT emp_sk\n",
 					"FROM hranalytics_db.fact_employee_metrics\n",
 					"WHERE rating < 2 AND survey_score < 5;\n",
+					"\n",
 					""
 				],
 				"execution_count": 5
